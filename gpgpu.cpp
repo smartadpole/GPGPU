@@ -121,16 +121,16 @@ void prepare_data() {
  */
 GLuint CreateShader(GLenum shader_kind, const char *shader_src) {
     // Create the shader.
-    GLuint shader = glCreateShader(shader_kind);
-    glShaderSource(shader, 1, &shader_src, nullptr);
-    glCompileShader(shader);
+    GLuint shader = glCreateShader(shader_kind);        //用来编译源码，返回ID
+    glShaderSource(shader, 1, &shader_src, nullptr);    // 传 glsl 进取，count 是源码个数，null 不限长度
+    glCompileShader(shader);                            // GPU 编译
 
     // Check compile errors.
     GLint err;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &err);
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &err);     // 查看状态
 
     GLint info_log_len;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_log_len);
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_log_len);       // 取指
     // LOG(INFO) << "\n\n\nshader src: " << shader_src << " res: " << err << " log len: " << info_log_len;
 
     if (!err && info_log_len > 0) {
@@ -158,11 +158,11 @@ void CreateProgram(const std::string file) {
     fragment_shader = CreateShader(GL_FRAGMENT_SHADER, fs_src);
 
     // Create the program and link the shaders.
-    program = glCreateProgram();
-    glAttachShader(program, vertex_shader);
+    program = glCreateProgram();                // 用于包裹 VS、PS，然后整个送给 GPU
+    glAttachShader(program, vertex_shader);     // 把 shader 绑定到 program
     glAttachShader(program, fragment_shader);
-    glLinkProgram(program);
-    glUseProgram(program);
+    glLinkProgram(program);                     // 封装 program，不再更新
+    glUseProgram(program);                      // 同一时间只能用一个，来指定哪个被使用
 
     OPENGL_CHECK_ERROR;
     // OPENGL_CALL(glDetachShader(program, vertex_shader));
@@ -188,25 +188,25 @@ GLuint CreateTexture(const TYPE *data, GLsizei W, GLsizei H)
     GLuint texture;
 
     // Create a texture.
-    OPENGL_CALL(glGenTextures(1, &texture));
+    OPENGL_CALL(glGenTextures(1, &texture));     // 同buffer，创建名字
 
     // Bind to temporary unit.
     // workspace.BindTextureUnit(workspace.NumTextureUnits() - 1, texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    // TODO(zhixunt): What are these?
+    glBindTexture(GL_TEXTURE_2D, texture);       // 同buffer，创建 texture
+    // 通过设置纹理属性，把纹理映射到buffer上；此处设置了过大过小时需要作的插值算法，和尺寸以外的 padding； 
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
     // Similar to cudaMemcpy.
-    OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
-    OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, data));
+    OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));      // CPU ——》GPU 传数据
+    OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, data));        //同上，传一部分数据
 
     return texture;
 }
 
 void SetFrameBuffer(int W, int H, TYPE output_texture){
-    OPENGL_CALL(glViewport(0, 0, W, H));
+    OPENGL_CALL(glViewport(0, 0, W, H));        // 设置画布上需要绘制的位置
 
     // Set "renderedTexture" as our colour attachement #0
     // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, output_texture , 0);
@@ -217,7 +217,7 @@ void SetFrameBuffer(int W, int H, TYPE output_texture){
 
 void SetInt(const std::string name, const int value)
 {
-    glUniform1i(glGetUniformLocation(program, name.c_str()), value);
+    glUniform1i(glGetUniformLocation(program, name.c_str()), value);    // 获取 uniform 的位置； 赋值给 uniform
 }
 
 void SetFloat(const std::string name, const float value)
@@ -229,18 +229,18 @@ void SetInput2D( std::string name, GLuint id,  int tex_id)
 {
     GLint location= glGetUniformLocation(program, name.c_str());
     glUniform1i(location, tex_id);
-    glActiveTexture(GL_TEXTURE0+tex_id);
-    glBindTexture(GL_TEXTURE_2D, id);
+    glActiveTexture(GL_TEXTURE0+tex_id);        //切换纹理单元
+    glBindTexture(GL_TEXTURE_2D, id);           // 同buffer，创建 texture
 }
 
 void SetVertexShader()
 {
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices);
-    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(0);                                           // 让该变量可以访问
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices);           // CPU 往 GPU 传数据
 
-    // auto point_attrib = GLuint(glGetAttribLocation(program, "point"));
-    // OPENGL_CALL(glEnableVertexAttribArray(point_attrib));
-    // OPENGL_CALL(glVertexAttribPointer(point_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr));
+    // auto point_attrib = GLuint(glGetAttribLocation(program, "point"));       //获取顶点着色器中变量的位置
+    // OPENGL_CALL(glEnableVertexAttribArray(point_attrib));                    // 让该变量可以访问
+    // OPENGL_CALL(glVertexAttribPointer(point_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr));  // CPU 往 GPU 传数据
 }
 
 void Bind(const int W, const int H, const GLuint& input0, const float a)
@@ -257,11 +257,23 @@ void Bind(const int W, const int H, const GLuint& input0, const float a)
 
 void Render()
 {
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-    // OPENGL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6));
-    glFinish();
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);           // 对画布进行清空一下
+    glClear(GL_COLOR_BUFFER_BIT);                   // 涂抹背景色
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);            // 指定需要绘制的信息，用于后续的绘制操作； 从第0个开始，绘制4个点； 扇形的三角形
+    // OPENGL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6));      // 绘制独立的三角形
+    glFinish();                                     // 强制完成所有 gl 命令； 
+}
+
+GLuint CreateVertexShader()
+{
+    GLuint input;
+
+    OPENGL_CALL(glGenTextures(1, &input));     // 同buffer，创建名字
+    glBindTexture(GL_TEXTURE_2D, input);       // 同buffer，创建 texture
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);      // CPU ——》GPU 传数据
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, input, 0); // 把数据传给 FBO，从纹理，（也可以是RBO）
+
+    return input;
 }
 
 int main() 
@@ -279,13 +291,7 @@ int main()
 
     // Textures
     GLuint input0 = CreateTexture(data, W, H);
-    GLuint input1;
-
-    OPENGL_CALL(glGenTextures(1, &input1));
-    glBindTexture(GL_TEXTURE_2D, input1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, input1, 0);
-    
+    CreateVertexShader();
     CreateProgram("");
 
     Timer timer_pre;
@@ -303,6 +309,9 @@ int main()
     // Get data
 
     Timer timer_post;
+    // 读取结果：
+    // 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
+    // 绑定 framebuffer：
     glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result);
     timer_post.Timing("download");
 
