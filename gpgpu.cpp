@@ -1,11 +1,14 @@
 #include <iostream>
+#include <fstream>
 #include <iomanip>
-
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#include <glog/logging.h>
 #include <sys/time.h> //test
 
-// #define DISPLAY 
+#include "context.h"
+
+#define DISPLAY 
 const int H = 2400;
 const int W = 3200;
 
@@ -34,6 +37,10 @@ const GLchar *fs_src =
     "  vec4 color = texture2D(img, tex_coord);\n"
     "  gl_FragColor = color * vec4(a, 1.0, 1.0, 1.0);\n"
     "}\n";
+
+GLuint vertex_shader;
+GLuint fragment_shader;
+GLuint program;
 
 const GLfloat vertices[] = {
     -1.0, -1.0, 0.0,
@@ -78,6 +85,19 @@ private:
 };
 
 
+std::string ReadKernel(const std::string file)
+{
+    std::ifstream fd(file);
+    std::string src = std::string(std::istreambuf_iterator<char>(fd),
+            (std::istreambuf_iterator<char>()));
+    if(src.empty()){
+        LOG(FATAL) << "Read File ERROR from " << file;
+    }
+
+    return src;
+}
+
+
 void prepare_data() {
     for (int i = 0; i < H; i++)
         for (int j = 0; j < W; j++)
@@ -92,65 +112,165 @@ void prepare_data() {
     #endif
 }
 
-void create_context() {
-    eglDisplay  = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    eglInitialize(eglDisplay, nullptr, nullptr);
+/*!
+ * \brief Create and compile a shader from a source string.
+ * \param shader_kind The kind of shader.
+ * Could be GL_VERTEX_SHADER or GL_FRAGMENT_SHADER.
+ * \param shader_src The source string of the shader.
+ * \return The compiled shader ID.
+ */
+GLuint CreateShader(GLenum shader_kind, const char *shader_src) {
+    // Create the shader.
+    GLuint shader = glCreateShader(shader_kind);
+    glShaderSource(shader, 1, &shader_src, nullptr);
+    glCompileShader(shader);
 
-    EGLint numConfigs;
-    EGLConfig eglConfig;
+    // Check compile errors.
+    GLint err;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &err);
 
-    const EGLint configAttribs[] = {
-        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-        EGL_BLUE_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_RED_SIZE, 8,
-        EGL_DEPTH_SIZE, 8,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, // !
-        EGL_NONE
-    };
+    GLint info_log_len;
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_log_len);
+    // LOG(INFO) << "\n\n\nshader src: " << shader_src << " res: " << err << " log len: " << info_log_len;
 
-    eglChooseConfig(eglDisplay, configAttribs, &eglConfig, 1, &numConfigs);
+    if (!err && info_log_len > 0) {
+        std::unique_ptr<char[]> err_msg(new char[info_log_len + 1]);
+        glGetShaderInfoLog(shader, info_log_len, nullptr, err_msg.get());
+        LOG(FATAL) << err_msg.get();
+    }
 
-    const EGLint pbufferAttribs[] = {
-        EGL_WIDTH, 1,
-        EGL_HEIGHT, 1,
-        EGL_NONE,
-    };
+    OPENGL_CHECK_ERROR;
 
-    eglSurface = eglCreatePbufferSurface(eglDisplay, eglConfig, pbufferAttribs);
-
-    const EGLint contextAttribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2, // !
-        EGL_NONE
-    };
-
-    eglContext = eglCreateContext(eglDisplay, eglConfig,  EGL_NO_CONTEXT, contextAttribs);
-    eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+    return shader;
 }
 
-void destroy_context() {
-    eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
-    eglDestroyContext(eglDisplay, eglContext);
-    eglDestroySurface(eglDisplay, eglSurface);
-    eglTerminate(eglDisplay);
 
-    eglDisplay = EGL_NO_DISPLAY;
-    eglSurface = EGL_NO_SURFACE;
-    eglContext = EGL_NO_CONTEXT;
+/*!
+ * \brief Create a program that uses the given vertex and fragment shaders.
+ * \param fragment_shader The **compiled** fragment shader.
+ * \return The program ID.
+ */
+void CreateProgram(const std::string file) {
+    
+    // std::string fragment = ReadKernel(file);
+
+    vertex_shader = CreateShader(GL_VERTEX_SHADER, vs_src);
+    fragment_shader = CreateShader(GL_FRAGMENT_SHADER, fs_src);
+
+    // Create the program and link the shaders.
+    program = glCreateProgram();
+    glAttachShader(program, vertex_shader);
+    glAttachShader(program, fragment_shader);
+    glLinkProgram(program);
+    glUseProgram(program);
+
+    OPENGL_CHECK_ERROR;
+    // OPENGL_CALL(glDetachShader(program, vertex_shader));
+    // OPENGL_CALL(glDetachShader(program, fragment_shader));
 }
 
-void create_framebuffer() {
+GLuint InitFrameBuffer() 
+{
     GLuint fb;
     glGenFramebuffers(1, &fb);
     glBindFramebuffer(GL_FRAMEBUFFER, fb);
+
+    return fb;
+}
+
+void DestoryFrameBuffer(const GLuint& frameBuffer)
+{
+    glDeleteFramebuffers(1, &frameBuffer);
+}
+
+GLuint CreateTexture(const TYPE *data, GLsizei W, GLsizei H)
+{
+    GLuint texture;
+
+    // Create a texture.
+    OPENGL_CALL(glGenTextures(1, &texture));
+
+    // Bind to temporary unit.
+    // workspace.BindTextureUnit(workspace.NumTextureUnits() - 1, texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    // TODO(zhixunt): What are these?
+    OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
+    OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
+    OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+    OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+    // Similar to cudaMemcpy.
+    OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));
+    OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, data));
+
+    return texture;
+}
+
+void SetFrameBuffer(int W, int H, TYPE output_texture){
+    OPENGL_CALL(glViewport(0, 0, W, H));
+
+    // Set "renderedTexture" as our colour attachement #0
+    // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, output_texture , 0);
+    // Always check that our framebuffer is ok
+    // GLenum flag = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    // LOG_IF(FATAL, flag != GL_FRAMEBUFFER_COMPLETE) << "Framebuffer not complete.";
+}
+
+void SetInt(const std::string name, const int value)
+{
+    glUniform1i(glGetUniformLocation(program, name.c_str()), value);
+}
+
+void SetFloat(const std::string name, const float value)
+{
+    glUniform1f(glGetUniformLocation(program, name.c_str()), value);
+}
+
+void SetInput2D( std::string name, GLuint id,  int tex_id)
+{
+    GLint location= glGetUniformLocation(program, name.c_str());
+    glUniform1i(location, tex_id);
+    glActiveTexture(GL_TEXTURE0+tex_id);
+    glBindTexture(GL_TEXTURE_2D, id);
+}
+
+void SetVertexShader()
+{
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices);
+    glEnableVertexAttribArray(0);
+
+    // auto point_attrib = GLuint(glGetAttribLocation(program, "point"));
+    // OPENGL_CALL(glEnableVertexAttribArray(point_attrib));
+    // OPENGL_CALL(glVertexAttribPointer(point_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr));
+}
+
+void Bind(const int W, const int H, const GLuint& input0, const float a)
+{
+    OPENGL_CALL(glUseProgram(program));
+
+    SetFrameBuffer(W, H, 0);
+    SetVertexShader();
+    SetInput2D("img", input0, 0);
+
+    // set uniform
+    SetFloat("a", a);
+}
+
+void Render()
+{
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+    // OPENGL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6));
+    glFinish();
 }
 
 int main() 
 {
+    std::cout << "H*W: " << H << "*" << W << std::endl;
     Timer timer_all;
     prepare_data();
-    create_context();
-    create_framebuffer();
+    opengl::example::InitContext();
+    GLuint frameBuffer = InitFrameBuffer();
 
     // Get max texture size
     GLint maxtexsize;
@@ -158,78 +278,18 @@ int main()
     // std::cout << "Max texture size = " << maxtexsize << std::endl;
 
     // Textures
-    GLuint tex[2];
-    glGenTextures(2, tex);
+    GLuint input0 = CreateTexture(data, W, H);
+    GLuint input1;
 
-    glBindTexture(GL_TEXTURE_2D, tex[0]);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    OPENGL_CALL(glGenTextures(1, &input1));
+    glBindTexture(GL_TEXTURE_2D, input1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, data);
-
-    glBindTexture(GL_TEXTURE_2D, tex[1]);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex[1], 0);
-
-    // Shaders
-    GLuint program = glCreateProgram();
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-
-    glShaderSource(vs, 1, &vs_src, NULL);
-    glShaderSource(fs, 1, &fs_src, NULL);
-
-    // Compiling and linking
-
-    GLint shader_compiled;
-    GLsizei log_length;
-    GLchar message[1024];
-
-    glCompileShader(vs);
-    glGetShaderiv(vs, GL_COMPILE_STATUS, &shader_compiled);
-    if (shader_compiled != GL_TRUE)
-    {
-        glGetShaderInfoLog(vs, 1024, &log_length, message);
-        std::cout << "Error: " << message << std::endl;
-    }
-
-    glCompileShader(fs);
-    glGetShaderiv(fs, GL_COMPILE_STATUS, &shader_compiled);
-    if (shader_compiled != GL_TRUE)
-    {
-        glGetShaderInfoLog(fs, 1024, &log_length, message);
-        std::cout << "Error: " << message << std::endl;
-    }
-
-    glBindAttribLocation(program, 0, "position");
-
-    glAttachShader(program, vs);
-    glAttachShader(program, fs);
-
-    glLinkProgram(program);
-
-    glUseProgram(program);
-
-    // Preparing framebuffer
-
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    glViewport(0, 0, W, H);
-
-    // Passing data to shaders
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex[0]);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, input1, 0);
+    
+    CreateProgram("");
 
     Timer timer_pre;
-    GLint img_loc = glGetUniformLocation(program, "img");
-    glUniform1i(img_loc, 0);
-
-    GLint a_loc = glGetUniformLocation(program, "a");
-    glUniform1f(a_loc, 2.0);
+    Bind(W, H, input0, 1.5);
     timer_pre.Timing("upload");
 
     Timer timer;
@@ -237,13 +297,7 @@ int main()
     int i = count;
     while (i--)
     {
-        // Drawing
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices);
-        glEnableVertexAttribArray(0);
-
-        glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-
-        glFinish();
+        Render();
     }
     timer.Timing("compute : in iterator " + std::to_string(count));
     // Get data
@@ -263,5 +317,6 @@ int main()
     }
     #endif 
 
-    destroy_context();
+    DestoryFrameBuffer(frameBuffer);
+    opengl::example::DestroyContext();
 }
