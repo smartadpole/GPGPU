@@ -1,15 +1,9 @@
-#version 200 es
 precision mediump float;
-uniform sampler2D A;
-uniform sampler2D B;
-uniform int N;
-out float color;
+uniform sampler2D img;
+varying vec2 tex_coord;
+uniform float a;
+
 void main() {
-    ivec2 pixel = ivec2(gl_FragCoord.xy);
-    color = 0.0;
-    for (int i = 0; i < N; i++) {
-        float a = texelFetch(A, ivec2(i, pixel.y), 0).r;
-        float b = texelFetch(B, ivec2(pixel.x, i ), 0).r;
-        color += a * b;
-    }
-}
+  vec4 color = texture2D(img, tex_coord);
+  gl_FragColor = color * vec4(a, 1.0, 1.0, 1.0);
+};

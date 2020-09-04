@@ -1,15 +1,13 @@
-#version 200 es
-precision mediump int;
-uniform isampler2D A;
-uniform isampler2D B;
-uniform int N;
-out int color;
+precision mediump float;
+uniform sampler2D A;
+uniform sampler2D B;
+uniform float N;
+varying vec2 tex_coord;
+
 void main() {
-    ivec2 pixel = ivec2(gl_FragCoord.xy);
-    color = 0;
-    for (int i = 0; i < N; i++) {
-        int a = texelFetch(A, ivec2(i, pixel.y), 0).r;
-        int b = texelFetch(B, ivec2(pixel.x, i ), 0).r;
-        color += a * b;
-    }
+    vec4 a = texture2D(A, tex_coord);
+    vec4 b = texture2D(B, tex_coord);
+    // float a = texelFetch(A, ivec2(i, pixel.y), 0).r;
+    // float b = texelFetch(B, ivec2(pixel.x, i ), 0).r;
+    gl_FragColor = a+b;
 }

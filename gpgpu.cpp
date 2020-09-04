@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <iomanip>
+#include <random>
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <glog/logging.h>
@@ -11,6 +12,7 @@
 #define DISPLAY 
 const int H = 2400;
 const int W = 3200;
+const int num_channels = 1;
 
 using TYPE = uint32_t;
 TYPE *data = new TYPE[H * W];
@@ -28,25 +30,20 @@ const GLchar *vs_src =
     "  tex_coord = 0.5 * vec2(position.x + 1.0, position.y + 1.0);\n"
     "}\n";
 
-const GLchar *fs_src =
-    "precision mediump float;\n"
-    "uniform sampler2D img;\n"
-    "varying vec2 tex_coord;\n"
-    "uniform float a;\n"
-    "void main() {\n"
-    "  vec4 color = texture2D(img, tex_coord);\n"
-    "  gl_FragColor = color * vec4(a, 1.0, 1.0, 1.0);\n"
-    "}\n";
+using ARRAY_TYPE = std::vector<TYPE>;
+// std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
+std::uniform_int_distribution<int> DIST(0, 5);
+const std::string fs_src = "matrix_mul_int.glsl";
 
 GLuint vertex_shader;
 GLuint fragment_shader;
 GLuint program;
 
 const GLfloat vertices[] = {
-    -1.0, -1.0, 0.0,
-    -1.0, 1.0, 0.0,
-    1.0, 1.0, 0.0,
-    1.0, -1.0, 0.0
+    -1.0, -1.0, 0.0,    // bottomleft
+    -1.0, 1.0, 0.0,     // topleft
+    1.0, 1.0, 0.0,      // topright
+    1.0, -1.0, 0.0      // bottom right
 };
 
 
@@ -84,6 +81,31 @@ private:
     struct timeval start, end;
 };
 
+void PrintMatrix(const TYPE* data)
+{
+    #ifdef DISPLAY
+    for (int i = 0; i < 8; i++) {
+        for (int j = 0; j < 8; j++)
+            std::cout << std::setw(4) << data[i*W+j];
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+    #endif
+}
+
+void GenData(const int num_elements, ARRAY_TYPE& texture)
+{
+    std::random_device rd;
+    std::mt19937 mt(rd());
+
+    texture.resize(num_elements, 0);
+    
+    for (size_t i = 0; i != num_elements; ++i) {
+        texture[i] = DIST(mt);
+    }
+
+    PrintMatrix(texture.data());
+}
 
 std::string ReadKernel(const std::string file)
 {
@@ -98,18 +120,16 @@ std::string ReadKernel(const std::string file)
 }
 
 
-void prepare_data() {
-    for (int i = 0; i < H; i++)
-        for (int j = 0; j < W; j++)
-            data[i*W+j] = (i + j) % 256;
+void prepare_data(const int num_elements, TYPE* data) 
+{
+    std::random_device rd;
+    std::mt19937 mt(rd());
 
-    #ifdef DISPLAY
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++)
-            std::cout << std::setw(4) << data[i*W+j];
-        std::cout << std::endl;
+    for (size_t i = 0; i != num_elements; ++i) {
+        data[i] = DIST(mt);
     }
-    #endif
+
+    PrintMatrix(data);
 }
 
 /*!
@@ -122,7 +142,7 @@ void prepare_data() {
 GLuint CreateShader(GLenum shader_kind, const char *shader_src) {
     // Create the shader.
     GLuint shader = glCreateShader(shader_kind);        //用来编译源码，返回ID
-    glShaderSource(shader, 1, &shader_src, nullptr);    // 传 glsl 进取，count 是源码个数，null 不限长度
+    glShaderSource(shader, 1, &shader_src, nullptr);    // 传 glsl 进去，count 是源码个数，null 不限长度
     glCompileShader(shader);                            // GPU 编译
 
     // Check compile errors.
@@ -130,7 +150,7 @@ GLuint CreateShader(GLenum shader_kind, const char *shader_src) {
     glGetShaderiv(shader, GL_COMPILE_STATUS, &err);     // 查看状态
 
     GLint info_log_len;
-    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_log_len);       // 取指
+    glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &info_log_len);       // 取值
     // LOG(INFO) << "\n\n\nshader src: " << shader_src << " res: " << err << " log len: " << info_log_len;
 
     if (!err && info_log_len > 0) {
@@ -155,7 +175,7 @@ void CreateProgram(const std::string file) {
     // std::string fragment = ReadKernel(file);
 
     vertex_shader = CreateShader(GL_VERTEX_SHADER, vs_src);
-    fragment_shader = CreateShader(GL_FRAGMENT_SHADER, fs_src);
+    fragment_shader = CreateShader(GL_FRAGMENT_SHADER, ReadKernel(fs_src).c_str());
 
     // Create the program and link the shaders.
     program = glCreateProgram();                // 用于包裹 VS、PS，然后整个送给 GPU
@@ -190,7 +210,7 @@ GLuint CreateTexture(const TYPE *data, GLsizei W, GLsizei H)
     // Create a texture.
     OPENGL_CALL(glGenTextures(1, &texture));     // 同buffer，创建名字
 
-    // Bind to temporary unit.
+    // Upload to temporary unit.
     // workspace.BindTextureUnit(workspace.NumTextureUnits() - 1, texture);
     glBindTexture(GL_TEXTURE_2D, texture);       // 同buffer，创建 texture
     // 通过设置纹理属性，把纹理映射到buffer上；此处设置了过大过小时需要作的插值算法，和尺寸以外的 padding； 
@@ -201,11 +221,11 @@ GLuint CreateTexture(const TYPE *data, GLsizei W, GLsizei H)
     // Similar to cudaMemcpy.
     OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));      // CPU ——》GPU 传数据
     OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, data));        //同上，传一部分数据
-
+    
     return texture;
 }
 
-void SetFrameBuffer(int W, int H, TYPE output_texture){
+void InitFrameBuffer(int W, int H, TYPE output_texture){
     OPENGL_CALL(glViewport(0, 0, W, H));        // 设置画布上需要绘制的位置
 
     // Set "renderedTexture" as our colour attachement #0
@@ -233,26 +253,31 @@ void SetInput2D( std::string name, GLuint id,  int tex_id)
     glBindTexture(GL_TEXTURE_2D, id);           // 同buffer，创建 texture
 }
 
-void SetVertexShader()
+void UploadVertex(const GLfloat* vertices)
 {
-    glEnableVertexAttribArray(0);                                           // 让该变量可以访问
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices);           // CPU 往 GPU 传数据
+    auto loc = GLuint(glGetAttribLocation(program, "position"));       //获取顶点着色器中变量的位置，也可以直接用0
+    OPENGL_CALL(glEnableVertexAttribArray(loc));                    // 让该变量可以访问
+    glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, 0, vertices);           
+    // 指定顶点属性，传数据给 Attribute：【客户端对象】CPU 往 GPU 传数据；3个变量*4个单元，共12个值
 
-    // auto point_attrib = GLuint(glGetAttribLocation(program, "point"));       //获取顶点着色器中变量的位置
-    // OPENGL_CALL(glEnableVertexAttribArray(point_attrib));                    // 让该变量可以访问
-    // OPENGL_CALL(glVertexAttribPointer(point_attrib, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr));  // CPU 往 GPU 传数据
+    // 指定顶点属性，传数据给 Attribute：【顶点缓冲区对象】CPU 往 GPU 传数据；3个变量*4个单元，共12个值
+    // genbuffer bindbuffer binddata
+    // OPENGL_CALL(glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(vertices), nullptr));  
 }
 
-void Bind(const int W, const int H, const GLuint& input0, const float a)
+void UploadFragment(const GLuint& input0, const GLuint& input1, const float a)
 {
-    OPENGL_CALL(glUseProgram(program));
-
-    SetFrameBuffer(W, H, 0);
-    SetVertexShader();
-    SetInput2D("img", input0, 0);
+    SetInput2D("A", input0, 0);
+    SetInput2D("B", input1, 1);
 
     // set uniform
-    SetFloat("a", a);
+    SetFloat("N", a);
+}
+
+void Upload(const GLuint& input0, const GLuint& input1, const float a, const GLfloat* vertices)
+{
+    UploadVertex(vertices);
+    UploadFragment(input0, input1, a);
 }
 
 void Render()
@@ -280,7 +305,10 @@ int main()
 {
     std::cout << "H*W: " << H << "*" << W << std::endl;
     Timer timer_all;
-    prepare_data();
+    ARRAY_TYPE texture0, texture1;
+    const size_t num_elements = W * H * num_channels;
+    GenData(num_elements, texture0);
+    GenData(num_elements, texture1);
     opengl::example::InitContext();
     GLuint frameBuffer = InitFrameBuffer();
 
@@ -290,12 +318,14 @@ int main()
     // std::cout << "Max texture size = " << maxtexsize << std::endl;
 
     // Textures
-    GLuint input0 = CreateTexture(data, W, H);
+    GLuint input0 = CreateTexture(texture0.data(), W, H);
+    GLuint input1 = CreateTexture(texture1.data(), W, H);
     CreateVertexShader();
     CreateProgram("");
+    InitFrameBuffer(W, H, 0);
 
     Timer timer_pre;
-    Bind(W, H, input0, 1.5);
+    Upload(input0, input1, 1.6, vertices);
     timer_pre.Timing("upload");
 
     Timer timer;
@@ -310,8 +340,8 @@ int main()
 
     Timer timer_post;
     // 读取结果：
-    // 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
-    // 绑定 framebuffer：
+    // 1. 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
+    // 2. 绑定 framebuffer：
     glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result);
     timer_post.Timing("download");
 
