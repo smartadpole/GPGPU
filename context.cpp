@@ -1,6 +1,7 @@
 #include "context.h"
 
 #include <EGL/egl.h>
+#include <iostream>
 
 namespace opengl{
     namespace {
@@ -41,6 +42,7 @@ namespace opengl{
                 eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
                 eglTerminate(eglDisplay);
                 eglDisplay = EGL_NO_DISPLAY;
+                std::cout << "error: " << choose << " " << eglGetError() << std::endl;
                 LOG(FATAL)<<"eglChooseConfig Failed When Creating Context!";
             }
 

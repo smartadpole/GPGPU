@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.2.0)
-
+add_definitions(-std=c++11)
 project(opengl_sdk)
 find_package(glog REQUIRED)
 
@@ -34,4 +34,4 @@ add_executable(gpgpu ${SRC_FILES})
 
 target_include_directories(gpgpu PRIVATE ${GLOG_INCLUDE_DIR})
 
-target_link_libraries(gpgpu -lGLESv2 -lEGL -lGL -lglog -lpthread)
+target_link_libraries(gpgpu -lGLESv2 -lEGL -lglog -lpthread) #  -lGL

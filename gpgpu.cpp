@@ -6,6 +6,7 @@
 #include <GLES2/gl2.h>
 #include <glog/logging.h>
 #include <sys/time.h> //test
+#include <unistd.h>
 
 #include "context.h"
 
@@ -13,6 +14,7 @@
 const int H = 2400;
 const int W = 3200;
 const int num_channels = 1;
+const int SLEEP_TIME = 1;
 
 using TYPE = uint32_t;
 TYPE *data = new TYPE[H * W];
@@ -32,8 +34,8 @@ const GLchar *vs_src =
 
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(0, 5);
-const std::string fs_src = "matrix_mul_int.glsl";
+std::uniform_int_distribution<int> DIST(0, 10);
+const std::string fs_src = "../matrix_mul_int.glsl";
 
 GLuint vertex_shader;
 GLuint fragment_shader;
@@ -66,7 +68,7 @@ public:
         double timeuse = (1000000*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec) * 1.0 / 1000;
         if ("" != message)
         {
-            std::cout << "\033[32muse time(" << message << "): \033[31m" << timeuse << "\033[32mms\033[30m" << std::endl;
+            std::cout << "\033[32muse time(" << message << "): \033[31m" << timeuse << "\033[32mms\033[37m" << std::endl;
         }
         Start();
 
@@ -86,7 +88,7 @@ void PrintMatrix(const TYPE* data)
     #ifdef DISPLAY
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++)
-            std::cout << std::setw(4) << data[i*W+j];
+            std::cout << std::setw(11) << data[i*W+j];
         std::cout << std::endl;
     }
     std::cout << std::endl;
@@ -328,6 +330,9 @@ int main()
     Upload(input0, input1, 1.6, vertices);
     timer_pre.Timing("upload");
 
+    std::cout << "sleep..." << std::endl;
+    sleep(SLEEP_TIME);
+    std::cout << "sleep end" << std::endl;
     Timer timer;
     const int count = 10;
     int i = count;
@@ -338,23 +343,19 @@ int main()
     timer.Timing("compute : in iterator " + std::to_string(count));
     // Get data
 
+    std::cout << "sleep..." << std::endl;
+    sleep(SLEEP_TIME);
+    std::cout << "sleep end" << std::endl;
     Timer timer_post;
     // 读取结果：
     // 1. 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
     // 2. 绑定 framebuffer：
     glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result);
+    OPENGL_CHECK_ERROR;
     timer_post.Timing("download");
 
     timer_all.Timing("total");
-    #ifdef DISPLAY
-    
-    for (int r = 0; r < 8; ++r) {
-        for (int c = 0; c < 8; ++c) {
-            std::cout << std::setw(4) << (TYPE)result[r*W + c]; // %250
-        }
-        std::cout << std::endl;
-    }
-    #endif 
+    PrintMatrix(result);
 
     DestoryFrameBuffer(frameBuffer);
     opengl::example::DestroyContext();
