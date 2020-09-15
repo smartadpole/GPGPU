@@ -14,9 +14,10 @@
 const int H = 2400;
 const int W = 3200;
 const int num_channels = 1;
-const int SLEEP_TIME = 1;
+const int SLEEP_TIME = 0;
 
 using TYPE = uint32_t;
+const GLenum TYPE_ID = GL_UNSIGNED_BYTE;
 TYPE *data = new TYPE[H * W];
 TYPE *result = new TYPE[H * W];
 
@@ -34,7 +35,7 @@ const GLchar *vs_src =
 
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(0, 10);
+std::uniform_int_distribution<int> DIST(1, 3);
 const std::string fs_src = "../matrix_mul_int.glsl";
 
 GLuint vertex_shader;
@@ -88,7 +89,7 @@ void PrintMatrix(const TYPE* data)
     #ifdef DISPLAY
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++)
-            std::cout << std::setw(11) << data[i*W+j];
+            std::cout << std::setw(7) << data[i*W+j];
         std::cout << std::endl;
     }
     std::cout << std::endl;
@@ -221,8 +222,8 @@ GLuint CreateTexture(const TYPE *data, GLsizei W, GLsizei H)
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
     // Similar to cudaMemcpy.
-    OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr));      // CPU ——》GPU 传数据
-    OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, data));        //同上，传一部分数据
+    OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, TYPE_ID, nullptr));      // CPU ——》GPU 传数据
+    OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, TYPE_ID, data));        //同上，传一部分数据
     
     return texture;
 }
@@ -284,7 +285,7 @@ void Upload(const GLuint& input0, const GLuint& input1, const float a, const GLf
 
 void Render()
 {
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);           // 对画布进行清空一下
+    // glClearColor(0.0f, 0.0f, 0.0f, 0.0f);           // 对画布进行清空一下
     glClear(GL_COLOR_BUFFER_BIT);                   // 涂抹背景色
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);            // 指定需要绘制的信息，用于后续的绘制操作； 从第0个开始，绘制4个点； 扇形的三角形
     // OPENGL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6));      // 绘制独立的三角形
@@ -297,8 +298,10 @@ GLuint CreateVertexShader()
 
     OPENGL_CALL(glGenTextures(1, &input));     // 同buffer，创建名字
     glBindTexture(GL_TEXTURE_2D, input);       // 同buffer，创建 texture
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);      // CPU ——》GPU 传数据
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, TYPE_ID, NULL);      // CPU ——》GPU 传数据
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, input, 0); // 把数据传给 FBO，从纹理，（也可以是RBO）
+
+    OPENGL_CHECK_ERROR;
 
     return input;
 }
