@@ -5,5 +5,5 @@ uniform float a;
 
 void main() {
   vec4 color = texture2D(img, tex_coord);
-  gl_FragColor = color * vec4(a, 1.0, 1.0, 1.0);
+  gl_FragColor = color * a;
 };

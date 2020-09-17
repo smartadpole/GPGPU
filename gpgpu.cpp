@@ -7,6 +7,7 @@
 #include <glog/logging.h>
 #include <sys/time.h> //test
 #include <unistd.h>
+#include <bitset>
 
 #include "context.h"
 
@@ -16,7 +17,7 @@ const int W = 3200;
 const int num_channels = 1;
 const int SLEEP_TIME = 0;
 
-using TYPE = uint32_t;
+using TYPE = int32_t;
 const GLenum TYPE_ID = GL_UNSIGNED_BYTE;
 TYPE *data = new TYPE[H * W];
 TYPE *result = new TYPE[H * W];
@@ -35,8 +36,8 @@ const GLchar *vs_src =
 
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(1, 3);
-const std::string fs_src = "../matrix_mul_int.glsl";
+std::uniform_int_distribution<int> DIST(-21, 3);
+const std::string fs_src = "../matrix_mul_test.glsl";
 
 GLuint vertex_shader;
 GLuint fragment_shader;
@@ -87,9 +88,9 @@ private:
 void PrintMatrix(const TYPE* data)
 {
     #ifdef DISPLAY
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++)
-            std::cout << std::setw(7) << data[i*W+j];
+    for (int i = 0; i < 6; i++) {
+        for (int j = 0; j < 6; j++)
+            std::cout << std::setw(10) << data[i*W+j];
         std::cout << std::endl;
     }
     std::cout << std::endl;
@@ -248,10 +249,18 @@ void SetFloat(const std::string name, const float value)
     glUniform1f(glGetUniformLocation(program, name.c_str()), value);
 }
 
-void SetInput2D( std::string name, GLuint id,  int tex_id)
+GLint GetLocation(const std::string name )
+{
+    return glGetUniformLocation(program, name.c_str());
+}
+
+void SetInput2D( std::string name, GLuint id,  int tex_id, const bool FLOAT = false)
 {
     GLint location= glGetUniformLocation(program, name.c_str());
-    glUniform1i(location, tex_id);
+    if (!FLOAT)
+        glUniform1i(location, tex_id);
+    else
+        glUniform1f(location, tex_id);
     glActiveTexture(GL_TEXTURE0+tex_id);        //切换纹理单元
     glBindTexture(GL_TEXTURE_2D, id);           // 同buffer，创建 texture
 }
@@ -270,11 +279,12 @@ void UploadVertex(const GLfloat* vertices)
 
 void UploadFragment(const GLuint& input0, const GLuint& input1, const float a)
 {
-    SetInput2D("A", input0, 0);
-    SetInput2D("B", input1, 1);
+    SetInput2D("input_image", input0, 0);
+    // SetInput2D("B", input1, 1);
+    glUniform4i(GetLocation("output_shape"), 1, 1, 2, 1);
 
     // set uniform
-    SetFloat("N", a);
+    // SetFloat("N", a);
 }
 
 void Upload(const GLuint& input0, const GLuint& input1, const float a, const GLfloat* vertices)
@@ -306,14 +316,44 @@ GLuint CreateVertexShader()
     return input;
 }
 
+
+void JudgeSystem()
+{
+	int a = 1;
+	char * p = (char *)&a;
+ 
+	if (0b00000001 == *p)
+	{
+		std::cout<<"小端"<<std::endl; 
+	}
+	else
+	{
+		std::cout<<"大端"<<std::endl; 
+	}
+}
+
+void PrintHostBinary(const TYPE data)
+{
+    size_t size = sizeof  (data);
+    JudgeSystem();
+    std::cout << size << std::endl;
+    char* p = (char*)&data;
+    for (int i = 0; i < size; ++i)
+    {
+        std::cout << std::bitset<sizeof (char)*8>(p[i]) << " ";
+    }
+
+    std::cout << std::endl;
+}
+
 int main() 
 {
     std::cout << "H*W: " << H << "*" << W << std::endl;
     Timer timer_all;
-    ARRAY_TYPE texture0, texture1;
+    ARRAY_TYPE texture0, texture1{1, 1, 2, 1};
     const size_t num_elements = W * H * num_channels;
     GenData(num_elements, texture0);
-    GenData(num_elements, texture1);
+    // GenData(4, texture1);
     opengl::example::InitContext();
     GLuint frameBuffer = InitFrameBuffer();
 
@@ -324,9 +364,10 @@ int main()
 
     // Textures
     GLuint input0 = CreateTexture(texture0.data(), W, H);
-    GLuint input1 = CreateTexture(texture1.data(), W, H);
+    GLuint input1 = CreateTexture(texture1.data(), 1, 4);
     CreateVertexShader();
     CreateProgram("");
+    std::cout << "create program" << std::endl;
     InitFrameBuffer(W, H, 0);
 
     Timer timer_pre;
@@ -359,6 +400,7 @@ int main()
 
     timer_all.Timing("total");
     PrintMatrix(result);
+    PrintHostBinary(result[0]);
 
     DestoryFrameBuffer(frameBuffer);
     opengl::example::DestroyContext();

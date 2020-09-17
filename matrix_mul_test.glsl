@@ -13,6 +13,7 @@ uniform sampler2D input_image;
 // from any to any4
 // output shape is equal to input shape
 uniform ivec4 output_shape;
+#define MAX 255.0
 
 #define UP_DIV(x, y) (((x)+(y)-1)/(y))
 
@@ -25,7 +26,8 @@ void main(){
     int output_num_elements = output_shape.x * output_shape.y
                     * output_shape.z * output_shape.w;
     output_num_elements = UP_DIV(output_num_elements, 4);
-    if(pos.x+pos.y*MAX_TEXTURE_SIZE>=output_num_elements){
+    if(pos.x+pos.y*MAX_TEXTURE_SIZE>=output_num_elements)
+    {
         return;
     }
 
@@ -37,8 +39,8 @@ void main(){
         int x = offset%MAX_TEXTURE_SIZE;
         int y = offset/MAX_TEXTURE_SIZE;
 
-        res[i] = float(x)/255.0; //texture2D(input_image, vec2(x, y))[index%4];
+        res[i] = texture2D(input_image, vec2(x, y))[index%4];
     }
 
-    gl_FragColor = res;
+    gl_FragColor = vec4(1.0, 0.0, 0.0, 0.0);
 }
