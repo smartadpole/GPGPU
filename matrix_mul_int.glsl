@@ -6,7 +6,7 @@ uniform sampler2D A;
 uniform sampler2D B;
 uniform float N;
 varying vec2 tex_coord;
-const float maxVal = 255.f;
+const float maxVal = 255.0;
 
 void main() {
     vec4 a = texture2D(A, tex_coord);

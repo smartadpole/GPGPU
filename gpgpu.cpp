@@ -36,7 +36,7 @@ const GLchar *vs_src =
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
 std::uniform_int_distribution<int> DIST(1, 3);
-const std::string fs_src = "../matrix_mul_int.glsl";
+const std::string fs_src = "../matrix_mul_float.glsl";
 
 GLuint vertex_shader;
 GLuint fragment_shader;
@@ -206,7 +206,7 @@ void DestoryFrameBuffer(const GLuint& frameBuffer)
     glDeleteFramebuffers(1, &frameBuffer);
 }
 
-GLuint CreateTexture(const TYPE *data, GLsizei W, GLsizei H)
+GLuint CreateGPUData(const TYPE *data, GLsizei W, GLsizei H)
 {
     GLuint texture;
 
@@ -221,11 +221,21 @@ GLuint CreateTexture(const TYPE *data, GLsizei W, GLsizei H)
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
     OPENGL_CALL(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+
+    // 1. ------
     // Similar to cudaMemcpy.
-    OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, TYPE_ID, nullptr));      // CPU ——》GPU 传数据
-    OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, TYPE_ID, data));        //同上，传一部分数据
+    OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, TYPE_ID, data));      // CPU ——》GPU 传数据
+
+    // 2. ------
+    // OPENGL_CALL(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, W, H, 0, GL_RGBA, TYPE_ID, nullptr));
+    // OPENGL_CALL(glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, H, GL_RGBA, TYPE_ID, data));        //同上，传一部分数据
     
     return texture;
+}
+
+void Upload()
+{
+
 }
 
 void InitFrameBuffer(int W, int H, TYPE output_texture){
@@ -256,7 +266,7 @@ void SetInput2D( std::string name, GLuint id,  int tex_id)
     glBindTexture(GL_TEXTURE_2D, id);           // 同buffer，创建 texture
 }
 
-void UploadVertex(const GLfloat* vertices)
+void SetVertex(const GLfloat* vertices)
 {
     auto loc = GLuint(glGetAttribLocation(program, "position"));       //获取顶点着色器中变量的位置，也可以直接用0
     OPENGL_CALL(glEnableVertexAttribArray(loc));                    // 让该变量可以访问
@@ -268,25 +278,25 @@ void UploadVertex(const GLfloat* vertices)
     // OPENGL_CALL(glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(vertices), nullptr));  
 }
 
-void UploadFragment(const GLuint& input0, const GLuint& input1, const float a)
+void SetFragment(const GLuint& input0, const float a)
 {
     SetInput2D("A", input0, 0);
-    SetInput2D("B", input1, 1);
-
-    // set uniform
-    SetFloat("N", a);
+    SetFloat("a", a);
 }
 
-void Upload(const GLuint& input0, const GLuint& input1, const float a, const GLfloat* vertices)
+void Download()
 {
-    UploadVertex(vertices);
-    UploadFragment(input0, input1, a);
+    Timer timer_post;
+    // 读取结果：
+    // 1. 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
+    // 2. 绑定 framebuffer：
+    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result);
+    OPENGL_CHECK_ERROR;
+    timer_post.Timing("download");
 }
 
 void Render()
 {
-    // glClearColor(0.0f, 0.0f, 0.0f, 0.0f);           // 对画布进行清空一下
-    glClear(GL_COLOR_BUFFER_BIT);                   // 涂抹背景色
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);            // 指定需要绘制的信息，用于后续的绘制操作； 从第0个开始，绘制4个点； 扇形的三角形
     // OPENGL_CALL(glDrawArrays(GL_TRIANGLES, 0, 6));      // 绘制独立的三角形
     glFinish();                                     // 强制完成所有 gl 命令； 
@@ -306,38 +316,18 @@ GLuint CreateVertexShader()
     return input;
 }
 
-int main() 
+void Sleep()
 {
-    std::cout << "H*W: " << H << "*" << W << std::endl;
-    Timer timer_all;
-    ARRAY_TYPE texture0, texture1;
-    const size_t num_elements = W * H * num_channels;
-    GenData(num_elements, texture0);
-    GenData(num_elements, texture1);
-    opengl::example::InitContext();
-    GLuint frameBuffer = InitFrameBuffer();
-
-    // Get max texture size
-    GLint maxtexsize;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtexsize);
-    // std::cout << "Max texture size = " << maxtexsize << std::endl;
-
-    // Textures
-    GLuint input0 = CreateTexture(texture0.data(), W, H);
-    GLuint input1 = CreateTexture(texture1.data(), W, H);
-    CreateVertexShader();
-    CreateProgram("");
-    InitFrameBuffer(W, H, 0);
-
-    Timer timer_pre;
-    Upload(input0, input1, 1.6, vertices);
-    timer_pre.Timing("upload");
-
     std::cout << "sleep..." << std::endl;
     sleep(SLEEP_TIME);
     std::cout << "sleep end" << std::endl;
+}
+
+void Compute()
+{
+    Sleep();
     Timer timer;
-    const int count = 10;
+    const int count = 1;
     int i = count;
     while (i--)
     {
@@ -346,20 +336,84 @@ int main()
     timer.Timing("compute : in iterator " + std::to_string(count));
     // Get data
 
-    std::cout << "sleep..." << std::endl;
-    sleep(SLEEP_TIME);
-    std::cout << "sleep end" << std::endl;
-    Timer timer_post;
-    // 读取结果：
-    // 1. 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
-    // 2. 绑定 framebuffer：
-    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result);
-    OPENGL_CHECK_ERROR;
-    timer_post.Timing("download");
+    Sleep();
+}
+
+GLuint GetInput(const size_t num_elements)
+{
+    ARRAY_TYPE texture0;
+    GenData(num_elements, texture0);
+    GLuint input0 = CreateGPUData(texture0.data(), W, H);
+
+    return input0;
+}
+
+void Activate()
+{
+    OPENGL_CALL(glUseProgram(program));
+}
+
+void InitContext()
+{
+    CreateVertexShader();
+    CreateProgram("");
+}
+
+void SetOutput(GLuint texture)
+{
+    // Set "renderedTexture" as our colour attachement #0
+    OPENGL_CALL(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                       texture , 0));
+    LOG_IF(FATAL, glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            << "Framebuffer not complete.";
+}
+
+void Layer(GLuint gpuInput, GLuint gpuOutput)
+{
+    std::cout << "-------------layer--------------" << std::endl;
+    Activate();
+    OPENGL_CALL(glViewport(0, 0, W, H));
+    if (gpuOutput > 0)
+        SetOutput(gpuOutput);
+
+    Timer timer_pre;
+    SetVertex(vertices);
+    SetFragment(gpuInput, 2);
+    timer_pre.Timing("upload");
+}
+
+int main() 
+{
+    std::cout << "H*W: " << H << "*" << W << std::endl;
+    Timer timer_all;
+    const size_t num_elements = W * H * num_channels;
+    opengl::example::InitContext();
+    GLuint frameBuffer = InitFrameBuffer();
+
+    // Get max texture size
+    GLint maxtexsize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtexsize);
+    std::cout << "max texture size: " << maxtexsize << std::endl;
+    
+    
+    GLuint input0 = GetInput(num_elements);
+    GLuint output0 = CreateGPUData(nullptr, W, H);
+    
+    InitContext();
+
+    Layer(input0, output0);
+
+    // glClearColor(0.0f, 0.0f, 0.0f, 0.0f);           // 对画布进行清空一下
+    glClear(GL_COLOR_BUFFER_BIT);                   // 涂抹背景色
+    Compute();
+
+    Layer(output0, 0);
+    Compute();
+
+    Download();
 
     timer_all.Timing("total");
     PrintMatrix(result);
-
     DestoryFrameBuffer(frameBuffer);
     opengl::example::DestroyContext();
 }
