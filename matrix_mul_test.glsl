@@ -5,42 +5,50 @@ precision PRECISION float;
 #define LOCAL_SIZE_X 1
 #define LOCAL_SIZE_Y 1
 #define MAX_TEXTURE_SIZE 32768
+#define MAX_VAL 255.0
 #extension GL_EXT_gpu_shader4:enable
-//any4_to_any
-// (1, nhwc/4, 4)
+//nchw_to_hwn4c4
+// input: (1, (nchw)/4, 4)
 uniform sampler2D input_image;
 
-// from any to any4
-// output shape is equal to input shape
+// output: nchw
 uniform ivec4 output_shape;
-#define MAX 255.0
+varying vec2 tex_coord;
 
 #define UP_DIV(x, y) (((x)+(y)-1)/(y))
 
-// (1, (nhwc)/4, 4)
+// (h*w* out_4, in_4*in4, out4)
+// chw: (out4, h*w* out_4, in_4*in4)
+// zyx
 
 
 void main(){
-    ivec2 pos = ivec2(gl_FragCoord.xy);
+    // w, h, c
+    ivec2 pos = ivec2(tex_coord*MAX_VAL);
+    int output_pos_x = pos.x;
+    int output_pos_y = pos.y;
+    int out_n4_ind = output_pos_y % UP_DIV(output_shape.x, 4);
+    output_pos_y =  output_pos_y / UP_DIV(output_shape.x, 4);
+    int out_w_ind = output_pos_y%output_shape.w;
+    output_pos_y = output_pos_y/output_shape.w;
+    int out_h_ind = output_pos_y%output_shape.z;
+    int out_c_ind = output_pos_x;
 
-    int output_num_elements = output_shape.x * output_shape.y
-                    * output_shape.z * output_shape.w;
-    output_num_elements = UP_DIV(output_num_elements, 4);
-    if(pos.x+pos.y*MAX_TEXTURE_SIZE>=output_num_elements)
-    {
-        return;
-    }
 
     vec4 res;
     for(int i=0;i<4;++i){
-        int output_index = (pos.x+pos.y*MAX_TEXTURE_SIZE)*4+i;
-        int index = output_index%output_shape.w;
-        int offset = output_index/output_shape.w*UP_DIV(output_shape.w, 4)+index/4;
+        if(out_n4_ind*4+i>=output_shape.x || out_c_ind>=output_shape.y){
+            continue;
+        }
+        int index = (((out_n4_ind*4+i)*output_shape.y+out_c_ind)*output_shape.z+out_h_ind)*output_shape.w+out_w_ind;
+        int offset = index/4;
         int x = offset%MAX_TEXTURE_SIZE;
         int y = offset/MAX_TEXTURE_SIZE;
 
         res[i] = texture2D(input_image, vec2(x, y))[index%4];
     }
 
-    gl_FragColor = vec4(1.0, 0.0, 0.0, 0.0);
+    gl_FragColor = res/MAX_VAL;
+    gl_FragColor = vec4(tex_coord.x*MAX_VAL, 0.0, 0.0, 0.0);
+    gl_FragColor = texture2D(input_image, gl_FragCoord.xy); 
 }

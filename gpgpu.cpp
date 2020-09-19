@@ -36,8 +36,8 @@ const GLchar *vs_src =
 
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(-21, 3);
-const std::string fs_src = "../matrix_mul_test.glsl";
+std::uniform_int_distribution<int> DIST(1, 2);
+const std::string fs_src = "../matrix_mul_int.glsl";
 
 GLuint vertex_shader;
 GLuint fragment_shader;
@@ -277,20 +277,20 @@ void UploadVertex(const GLfloat* vertices)
     // OPENGL_CALL(glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(vertices), nullptr));  
 }
 
-void UploadFragment(const GLuint& input0, const GLuint& input1, const float a)
+void UploadFragment(const GLuint& input0, const float a)
 {
     SetInput2D("input_image", input0, 0);
     // SetInput2D("B", input1, 1);
     glUniform4i(GetLocation("output_shape"), 1, 1, 2, 1);
 
     // set uniform
-    // SetFloat("N", a);
+    SetFloat("a", a);
 }
 
-void Upload(const GLuint& input0, const GLuint& input1, const float a, const GLfloat* vertices)
+void Upload(const GLuint& input0, const float a, const GLfloat* vertices)
 {
     UploadVertex(vertices);
-    UploadFragment(input0, input1, a);
+    UploadFragment(input0, a);
 }
 
 void Render()
@@ -336,7 +336,6 @@ void PrintHostBinary(const TYPE data)
 {
     size_t size = sizeof  (data);
     JudgeSystem();
-    std::cout << size << std::endl;
     char* p = (char*)&data;
     for (int i = 0; i < size; ++i)
     {
@@ -350,7 +349,7 @@ int main()
 {
     std::cout << "H*W: " << H << "*" << W << std::endl;
     Timer timer_all;
-    ARRAY_TYPE texture0, texture1{1, 1, 2, 1};
+    ARRAY_TYPE texture0;
     const size_t num_elements = W * H * num_channels;
     GenData(num_elements, texture0);
     // GenData(4, texture1);
@@ -364,14 +363,13 @@ int main()
 
     // Textures
     GLuint input0 = CreateTexture(texture0.data(), W, H);
-    GLuint input1 = CreateTexture(texture1.data(), 1, 4);
     CreateVertexShader();
     CreateProgram("");
     std::cout << "create program" << std::endl;
     InitFrameBuffer(W, H, 0);
 
     Timer timer_pre;
-    Upload(input0, input1, 1.6, vertices);
+    Upload(input0, 1.6, vertices);
     timer_pre.Timing("upload");
 
     std::cout << "sleep..." << std::endl;
