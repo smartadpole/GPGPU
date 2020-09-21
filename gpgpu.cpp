@@ -306,8 +306,16 @@ GLuint CreateVertexShader()
     return input;
 }
 
+void GetMaxSize()
+{
+    GLint maxtexsize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtexsize);
+    std::cout << "Max texture size = " << maxtexsize << std::endl;
+}
+
 int main() 
 {
+    GetMaxSize();
     std::cout << "H*W: " << H << "*" << W << std::endl;
     Timer timer_all;
     ARRAY_TYPE texture0, texture1;
@@ -315,12 +323,10 @@ int main()
     GenData(num_elements, texture0);
     GenData(num_elements, texture1);
     opengl::example::InitContext();
+    GetMaxSize();
     GLuint frameBuffer = InitFrameBuffer();
-
-    // Get max texture size
-    GLint maxtexsize;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxtexsize);
-    // std::cout << "Max texture size = " << maxtexsize << std::endl;
+    GetMaxSize();
+    
 
     // Textures
     GLuint input0 = CreateTexture(texture0.data(), W, H);

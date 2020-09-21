@@ -40,5 +40,5 @@ void main(){
         res[i] = float(x)/255.0; //texture2D(input_image, vec2(x, y))[index%4];
     }
 
-    gl_FragColor = res;
+    gl_FragColor = texture2D(input_image, vec2(pos));
 }
