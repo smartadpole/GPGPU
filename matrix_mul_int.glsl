@@ -12,5 +12,6 @@ void main() {
     vec4 a = texture2D(A, tex_coord);
     vec4 b = texture2D(B, tex_coord);
     // gl_FragColor =  a*b*maxVal; 
-    gl_FragColor = vec4(ivec4(a*maxVal)%ivec4(b*maxVal))/maxVal; // a%b
+    // gl_FragColor = vec4(ivec4(a*maxVal)%ivec4(b*maxVal))/maxVal; // a%b
+    gl_FragColor = mod(a, b); // a%b
 }
