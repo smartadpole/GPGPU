@@ -14,41 +14,21 @@ uniform sampler2D input_image;
 // output: nchw
 uniform ivec4 output_shape;
 varying vec2 tex_coord;
+const float maxVal = 255.0;
+const float W = 3200.0, H = 2400.0;
 
-#define UP_DIV(x, y) (((x)+(y)-1)/(y))
-
-// (h*w* out_4, in_4*in4, out4)
-// chw: (out4, h*w* out_4, in_4*in4)
-// zyx
-
+#define NEGATIVE(x) (256-(x))
+#define NEGATIVEf(x) (256.0-(x))
+#define OUTPUT(x) ((x)/maxVal)
+#define KEEP_SIGNAL(x) (sign(x) >= 0 ? (x) : NEGATIVE(abs(x)))
+#define KEEP_SIGNALf(x) (sign(x) >= 0.0 ? (x) : NEGATIVEf(abs(x)))
+#define KEEP_SIGNALf_texture(x) KEEP_SIGNALf((x)*maxVal)
 
 void main(){
     // w, h, c
-    ivec2 pos = ivec2(tex_coord*MAX_VAL);
-    int output_pos_x = pos.x;
-    int output_pos_y = pos.y;
-    int out_n4_ind = output_pos_y % UP_DIV(output_shape.x, 4);
-    output_pos_y =  output_pos_y / UP_DIV(output_shape.x, 4);
-    int out_w_ind = output_pos_y%output_shape.w;
-    output_pos_y = output_pos_y/output_shape.w;
-    int out_h_ind = output_pos_y%output_shape.z;
-    int out_c_ind = output_pos_x;
-
-
-    vec4 res;
-    for(int i=0;i<4;++i){
-        if(out_n4_ind*4+i>=output_shape.x || out_c_ind>=output_shape.y){
-            continue;
-        }
-        int index = (((out_n4_ind*4+i)*output_shape.y+out_c_ind)*output_shape.z+out_h_ind)*output_shape.w+out_w_ind;
-        int offset = index/4;
-        int x = offset%MAX_TEXTURE_SIZE;
-        int y = offset/MAX_TEXTURE_SIZE;
-
-        res[i] = texture2D(input_image, vec2(x, y))[index%4];
-    }
-
-    gl_FragColor = res/MAX_VAL;
-    gl_FragColor = vec4(tex_coord.x*MAX_VAL, 0.0, 0.0, 0.0);
-    gl_FragColor = texture2D(input_image, gl_FragCoord.xy); 
+    ivec2 pos = ivec2(tex_coord.x*W, tex_coord.y*H);
+    vec4 pixel = vec4(texture2D(input_image, pos).r, 0.0, 0.0, 0.0);
+    // pixel /= float(output_shape.z)*maxVal;
+    gl_FragColor = OUTPUT(vec4(pos.y, 0.0, 0.0, 128.0));
+    // gl_FragColor = pixel;
 }

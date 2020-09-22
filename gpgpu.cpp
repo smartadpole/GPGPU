@@ -36,8 +36,8 @@ const GLchar *vs_src =
 
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(1, 2);
-const std::string fs_src = "../matrix_mul_int.glsl";
+std::uniform_int_distribution<int> DIST(-2, -2);
+const std::string fs_src = "../matrix_mul_test.glsl";
 
 GLuint vertex_shader;
 GLuint fragment_shader;
@@ -85,12 +85,25 @@ private:
     struct timeval start, end;
 };
 
-void PrintMatrix(const TYPE* data)
+void PrintMatrixWithChar(TYPE* data)
+{
+    #ifdef DISPLAY
+    char* p = reinterpret_cast<char *>(data);
+    for (int i = 0; i < 6; i++) {
+        for (int j = 0; j < 12; j++)
+            std::cout << std::setw(5) << int(reinterpret_cast<char *>(&(data[i*W+j]))[0]);
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+    #endif
+}
+
+void PrintMatrix(TYPE* data)
 {
     #ifdef DISPLAY
     for (int i = 0; i < 6; i++) {
-        for (int j = 0; j < 6; j++)
-            std::cout << std::setw(10) << data[i*W+j];
+        for (int j = 0; j < 12; j++)
+            std::cout << std::setw(5) << data[i*W+j];
         std::cout << std::endl;
     }
     std::cout << std::endl;
@@ -281,7 +294,7 @@ void UploadFragment(const GLuint& input0, const float a)
 {
     SetInput2D("input_image", input0, 0);
     // SetInput2D("B", input1, 1);
-    glUniform4i(GetLocation("output_shape"), 1, 1, 2, 1);
+    glUniform4i(GetLocation("output_shape"), 1, 1, -2, 1);
 
     // set uniform
     SetFloat("a", a);
@@ -397,7 +410,7 @@ int main()
     timer_post.Timing("download");
 
     timer_all.Timing("total");
-    PrintMatrix(result);
+    PrintMatrixWithChar(result);
     PrintHostBinary(result[0]);
 
     DestoryFrameBuffer(frameBuffer);
