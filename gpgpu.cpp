@@ -36,7 +36,7 @@ const GLchar *vs_src =
 
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(-2, -2);
+std::uniform_int_distribution<int> DIST(-2, 1);
 const std::string fs_src = "../matrix_mul_test.glsl";
 
 GLuint vertex_shader;
