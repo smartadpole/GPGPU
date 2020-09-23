@@ -34,7 +34,7 @@ void main(){
     ivec2 pos = ivec2(tex_coord.x*W, tex_coord.y*H);
     vec4 pixel = vec4(texture2D(input_image, tex_coord).r, 0.0, 0.0, 0.0);
     vec4 pixel2 = vec4(texture2D(input_image, MoveRight(tex_coord)).r, 0.0, 0.0, 0.0);
-    // pixel /= float(output_shape.z)*maxVal;
+    // pixel /= float(2);
     // gl_FragColor = OUTPUT(vec4(pos.y, 0.0, 0.0, 128.0));
-    gl_FragColor = pixel * pixel2;
+    gl_FragColor = pixel;
 }

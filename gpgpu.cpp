@@ -358,6 +358,53 @@ void PrintHostBinary(const TYPE data)
     std::cout << std::endl;
 }
 
+void Download()
+{
+    GLint readType, readFormat;
+    GLubyte *pixels;
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_TYPE, &readType);
+    glGetIntegerv(GL_IMPLEMENTATION_COLOR_READ_FORMAT, &readFormat);
+    unsigned int bytesPerPixel = 0;
+
+    switch(readType)
+    {
+    case GL_UNSIGNED_BYTE:
+    {
+        std::cout << "name" << std::endl;
+        switch(readFormat)
+        {
+        case GL_RGBA:
+            bytesPerPixel = 4;
+            break;
+        case GL_RGB:
+            bytesPerPixel = 3;
+            break;
+        case GL_LUMINANCE_ALPHA:
+            bytesPerPixel = 2;
+            break;
+        case GL_ALPHA:
+        case GL_LUMINANCE:
+            bytesPerPixel = 1;
+            break;
+        }
+        break;
+    }
+    case GL_UNSIGNED_SHORT_4_4_4_4:
+        // GL_RGBA format
+    case GL_UNSIGNED_SHORT_5_5_5_1:
+        // GL_RGBA format
+    case GL_UNSIGNED_SHORT_5_6_5:
+        // GL_RGB format
+        bytesPerPixel = 2;
+        break;
+    }
+
+    std::cout << "bytes " << bytesPerPixel << std::endl;
+    pixels = (GLubyte*) malloc(W * H * bytesPerPixel);
+    glReadPixels(0, 0, W, H, readFormat, readType, pixels);
+    // PrintMatrixWithChar(pixels);
+}
+
 int main() 
 {
     std::cout << "H*W: " << H << "*" << W << std::endl;
@@ -411,6 +458,7 @@ int main()
 
     timer_all.Timing("total");
     PrintMatrixWithChar(result);
+    Download();
     PrintHostBinary(result[0]);
 
     DestoryFrameBuffer(frameBuffer);
