@@ -1,14 +1,7 @@
 #version 100
-#define FORMAT rgba32f
 #define PRECISION mediump
 precision PRECISION float;
-#define LOCAL_SIZE_X 1
-#define LOCAL_SIZE_Y 1
-#define MAX_TEXTURE_SIZE 32768
 #define MAX_VAL 255.0
-#extension GL_EXT_gpu_shader4:enable
-//nchw_to_hwn4c4
-// input: (1, (nchw)/4, 4)
 uniform sampler2D input_image;
 
 // output: nchw
@@ -36,5 +29,5 @@ void main(){
     vec4 pixel2 = vec4(texture2D(input_image, MoveRight(tex_coord)).r, 0.0, 0.0, 0.0);
     // pixel /= float(2);
     // gl_FragColor = OUTPUT(vec4(pos.y, 0.0, 0.0, 128.0));
-    gl_FragColor = pixel;
+    gl_FragColor = vec4(KEEP_SIGNALf(OUTPUT(-2.0)*3.0), 0.0, 0.0, 0.0);
 }

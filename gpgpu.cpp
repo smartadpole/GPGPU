@@ -370,7 +370,6 @@ void Download()
     {
     case GL_UNSIGNED_BYTE:
     {
-        std::cout << "name" << std::endl;
         switch(readFormat)
         {
         case GL_RGBA:
@@ -453,6 +452,7 @@ int main()
     // 1. 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
     // 2. 绑定 framebuffer：
     glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result);
+    // glCopyTexImage2D(input0, 0, GL_RGBA, 0, 0, W, H, 0);
     OPENGL_CHECK_ERROR;
     timer_post.Timing("download");
 
