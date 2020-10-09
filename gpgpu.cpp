@@ -35,7 +35,7 @@ const GLchar *vs_src =
 
 using ARRAY_TYPE = std::vector<TYPE>;
 // std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(1, 3);
+std::uniform_int_distribution<int> DIST(1, 2);
 const std::string fs_src = "../matrix_mul_int.glsl";
 
 GLuint vertex_shader;
@@ -69,7 +69,7 @@ public:
         double timeuse = (1000000*(end.tv_sec-start.tv_sec) + end.tv_usec-start.tv_usec) * 1.0 / 1000;
         if ("" != message)
         {
-            std::cout << "\033[32muse time(" << message << "): \033[31m" << timeuse << "\033[32mms\033[37m" << std::endl;
+            std::cout << "\033[32muse time(" << message << "): \033[31m" << timeuse << "\033[32mms\033[0m" << std::endl;
         }
         Start();
 
