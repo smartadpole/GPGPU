@@ -5,7 +5,6 @@ precision PRECISION float;
 #define LOCAL_SIZE_X 1
 #define LOCAL_SIZE_Y 1
 #define MAX_TEXTURE_SIZE 32768
-#extension GL_EXT_gpu_shader4:enable
 //any4_to_any
 // (1, nhwc/4, 4)
 uniform sampler2D input_image;
