@@ -418,9 +418,9 @@ int main()
     // 2. 绑定 framebuffer：
     glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result.data());
     OPENGL_CHECK_ERROR;
+    timer_post.Timing("download");
     ARRAY_FLOAT resultF;
     DeQuantization(result, resultF, tensor0);
-    timer_post.Timing("download");
 
     timer_all.Timing("total");
 
