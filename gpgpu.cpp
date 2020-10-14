@@ -7,6 +7,8 @@
 #include <glog/logging.h>
 #include <sys/time.h> //test
 #include <unistd.h>
+#include <algorithm>
+#include <iomanip>
 
 #include "context.h"
 
@@ -17,9 +19,11 @@ const int num_channels = 1;
 const int SLEEP_TIME = 0;
 
 using TYPE = uint32_t;
+using ARRAY_INT = std::vector<TYPE>;
+using ARRAY_FLOAT = std::vector<float>;
 const GLenum TYPE_ID = GL_UNSIGNED_BYTE;
 TYPE *data = new TYPE[H * W];
-TYPE *result = new TYPE[H * W];
+ARRAY_INT result(H * W, 0);
 
 EGLDisplay eglDisplay;
 EGLContext eglContext;
@@ -33,9 +37,9 @@ const GLchar *vs_src =
     "  tex_coord = 0.5 * vec2(position.x + 1.0, position.y + 1.0);\n"
     "}\n";
 
-using ARRAY_TYPE = std::vector<TYPE>;
-// std::uniform_real_distribution<float> DIST(1.0f, 2.0f);
-std::uniform_int_distribution<int> DIST(1, 2);
+const int MAX_INT = 255, MIN_INT = 0;
+std::uniform_real_distribution<float> DIST(0.0f, 2.0f);
+// std::uniform_int_distribution<int> DIST(1, 2);
 const std::string fs_src = "../matrix_mul_int.glsl";
 
 GLuint vertex_shader;
@@ -47,6 +51,21 @@ const GLfloat vertices[] = {
     -1.0, 1.0, 0.0,     // topleft
     1.0, 1.0, 0.0,      // topright
     1.0, -1.0, 0.0      // bottom right
+};
+
+struct Tensor
+{
+    GLuint id = 0;
+    float scale = 1;
+    int zeroPoint = 0;
+
+    Tensor(){}
+    Tensor(GLuint id, float scale, int zeroPoint)
+    {
+        this->id = id;
+        this->scale = scale;
+        this->zeroPoint = zeroPoint;
+    }
 };
 
 
@@ -84,30 +103,63 @@ private:
     struct timeval start, end;
 };
 
-void PrintMatrix(const TYPE* data)
+template <typename T>
+void PrintMatrix(const T* data)
 {
     #ifdef DISPLAY
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++)
-            std::cout << std::setw(7) << data[i*W+j];
+    for (int i = 0; i < std::min(H, 8); i++) {
+        for (int j = 0; j < std::min(W, 8); j++)
+            std::cout << std::setw(10) << std::setprecision(3) << data[i*W+j];
         std::cout << std::endl;
     }
     std::cout << std::endl;
     #endif
 }
 
-void GenData(const int num_elements, ARRAY_TYPE& texture)
+Tensor Quantization(ARRAY_FLOAT& src, ARRAY_INT& dst)
+{
+    const float MAX_FLOAT = *std::max_element(src.begin(), src.end());
+    const float MIN_FLOAT = 0; //*std::min_element(src.begin(), src.end());
+    float scale = (MAX_FLOAT - MIN_FLOAT) / (MAX_INT - MIN_INT);
+    int zeroPoint = MAX_INT - MAX_FLOAT/scale;
+
+    std::cout << "max: " << MAX_FLOAT << " ";
+    std::cout << "min: " << MIN_FLOAT << " ";
+    std::cout << "scale: " << scale << " ";
+    std::cout << "zero point: " << zeroPoint << std::endl;
+
+    for (size_t i = 0; i != src.size(); ++i) {
+        dst[i] = std::round(src[i]/scale + zeroPoint);
+    }
+
+    return Tensor(0, scale, zeroPoint);
+}
+
+void DeQuantization(ARRAY_INT& src, ARRAY_FLOAT& dst, Tensor& tensor)
+{
+    dst.resize(src.size(), 0);
+    for (size_t i = 0; i != src.size(); ++i) {
+        dst[i] = tensor.scale * (src[i] - tensor.zeroPoint);
+    }
+}
+
+Tensor GenData(const int num_elements, ARRAY_INT& texture)
 {
     std::random_device rd;
     std::mt19937 mt(rd());
+    ARRAY_FLOAT array(num_elements, 0);
 
     texture.resize(num_elements, 0);
     
     for (size_t i = 0; i != num_elements; ++i) {
-        texture[i] = DIST(mt);
+        array[i] = DIST(mt);
     }
 
-    PrintMatrix(texture.data());
+    PrintMatrix<float>(array.data());
+    Tensor tensor = Quantization(array, texture);
+    // PrintMatrix<uint>(texture.data());
+
+    return tensor;
 }
 
 std::string ReadKernel(const std::string file)
@@ -268,19 +320,22 @@ void UploadVertex(const GLfloat* vertices)
     // OPENGL_CALL(glVertexAttribPointer(loc, 3, GL_FLOAT, GL_FALSE, sizeof(vertices), nullptr));  
 }
 
-void UploadFragment(const GLuint& input0, const GLuint& input1, const float a)
+void UploadFragment(const Tensor tensor0, const Tensor tensor1)
 {
-    SetInput2D("A", input0, 0);
-    SetInput2D("B", input1, 1);
+    SetInput2D("A", tensor0.id, 0);
+    SetInput2D("B", tensor1.id, 1);
 
     // set uniform
-    SetFloat("N", a);
+    SetFloat("scaleA", tensor0.scale);
+    SetFloat("zeroPointA", tensor0.zeroPoint);
+    SetFloat("scaleB", tensor1.scale);
+    SetFloat("zeroPointB", tensor1.zeroPoint);
 }
 
-void Upload(const GLuint& input0, const GLuint& input1, const float a, const GLfloat* vertices)
+void Upload(const Tensor tensor0, const Tensor tensor1, const GLfloat* vertices)
 {
     UploadVertex(vertices);
-    UploadFragment(input0, input1, a);
+    UploadFragment(tensor0, tensor1);
 }
 
 void Render()
@@ -318,10 +373,10 @@ int main()
     GetMaxSize();
     std::cout << "H*W: " << H << "*" << W << std::endl;
     Timer timer_all;
-    ARRAY_TYPE texture0, texture1;
+    ARRAY_INT texture0, texture1;
     const size_t num_elements = W * H * num_channels;
-    GenData(num_elements, texture0);
-    GenData(num_elements, texture1);
+    Tensor tensor0 = GenData(num_elements, texture0);
+    Tensor tensor1 = GenData(num_elements, texture1);
     opengl::example::InitContext();
     GetMaxSize();
     GLuint frameBuffer = InitFrameBuffer();
@@ -334,9 +389,11 @@ int main()
     CreateVertexShader();
     CreateProgram("");
     InitFrameBuffer(W, H, 0);
+    tensor0.id = input0;
+    tensor1.id = input1;
 
     Timer timer_pre;
-    Upload(input0, input1, 1.6, vertices);
+    Upload(tensor0, tensor1, vertices);
     timer_pre.Timing("upload");
 
     std::cout << "sleep..." << std::endl;
@@ -359,12 +416,16 @@ int main()
     // 读取结果：
     // 1. 主动获取：glReadPixels、glCopyTexImage2D和glCopyTexSubImage2D
     // 2. 绑定 framebuffer：
-    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result);
+    glReadPixels(0, 0, W, H, GL_RGBA, GL_UNSIGNED_BYTE, result.data());
     OPENGL_CHECK_ERROR;
+    ARRAY_FLOAT resultF;
+    DeQuantization(result, resultF, tensor0);
     timer_post.Timing("download");
 
     timer_all.Timing("total");
-    PrintMatrix(result);
+
+    // PrintMatrix(result.data());
+    PrintMatrix(resultF.data());
 
     DestoryFrameBuffer(frameBuffer);
     opengl::example::DestroyContext();
