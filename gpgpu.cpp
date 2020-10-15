@@ -39,7 +39,7 @@ const GLchar *vs_src =
     "}\n";
 
 const int MAX_INT = 255, MIN_INT = 0;
-std::uniform_real_distribution<float> DIST(0.0f, 0.3f);
+std::uniform_real_distribution<float> DIST(-0.1f, 0.1f);
 // std::uniform_int_distribution<int> DIST(1, 2);
 const std::string fs_src = "../matrix_mul_int.glsl";
 
@@ -120,7 +120,7 @@ void PrintMatrix(const T* data)
 Tensor Quantization(ARRAY_FLOAT& src, ARRAY_INT& dst)
 {
     const float MAX_FLOAT = *std::max_element(src.begin(), src.end());
-    const float MIN_FLOAT = 0; //*std::min_element(src.begin(), src.end());
+    const float MIN_FLOAT = *std::min_element(src.begin(), src.end());
     float scale = (MAX_FLOAT - MIN_FLOAT) / (MAX_INT - MIN_INT);
     int zeroPoint = MAX_INT - MAX_FLOAT/scale;
 
@@ -199,7 +199,7 @@ void CompareToCPU(const ARRAY_FLOAT& texture0, const ARRAY_FLOAT& texture1
         {
             cpu_result[i] *= texture1[i];
         }
-        if(std::abs(retrieved[i] - cpu_result[i]) > 0.001f)
+        if(std::abs(retrieved[i] - cpu_result[i]) > 0.000001f)
         {
             std::cout << "CPU: " << std::setw(10) << cpu_result[i]
             <<" GPU: " << std::setw(10) << retrieved[i] 
