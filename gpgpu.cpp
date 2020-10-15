@@ -38,7 +38,7 @@ const GLchar *vs_src =
     "}\n";
 
 const int MAX_INT = 255, MIN_INT = 0;
-std::uniform_real_distribution<float> DIST(0.0f, 2.0f);
+std::uniform_real_distribution<float> DIST(0.0f, 0.3f);
 // std::uniform_int_distribution<int> DIST(1, 2);
 const std::string fs_src = "../matrix_mul_int.glsl";
 
