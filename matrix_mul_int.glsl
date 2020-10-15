@@ -13,30 +13,29 @@ const float maxVal = 255.0;
 #define INPUT(x) ((x) * maxVal)
 #define OUTPUT(x) ((x) / maxVal)
 
-vec4 Dequantize(vec4 a)
+vec4 Dequantize(const float zeroPoint, const float scale, vec4 a)
 {
-    return scaleA*(a-zeroPointA);;
+    return scale*(INPUT(a)-zeroPoint);
 }
 
-vec4 Quantize(vec4 a)
+vec4 Quantize(const float zeroPoint, const float scale, vec4 a)
 {
-    return a/scaleA + zeroPointA;
+    return OUTPUT(a/scale + zeroPoint);
 }
 
 
 void main() {
     vec4 a = texture2D(A, tex_coord);
     vec4 b = texture2D(B, tex_coord);
-    a = INPUT(a);
-    b = INPUT(b);
-    a = Dequantize(a);
-    b = Dequantize(b);
+
+    b = Dequantize(zeroPointB, scaleB, b);
+    a = Dequantize(zeroPointA, scaleA, a);
+    
 
     vec4 res = a*b;
 
-    res = Quantize(res);
-    res = OUTPUT(res);
+    res = Quantize(zeroPointA, scaleA, res);
     // gl_FragColor =  a*b*maxVal; 
-    gl_FragColor = a;
+    gl_FragColor = res;
     // gl_FragColor = mod(a, b); // a%b
 }
